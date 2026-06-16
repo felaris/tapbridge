@@ -160,6 +160,30 @@ func onlyDigits(s string) string {
 	return b.String()
 }
 
+// ── NDEF reading (tries bulk first, falls back to 16-byte chunks) ────────────
+
+func readNdef(card *scard.Card) []byte {
+	// Attempt 1: read all 48 bytes at once (pages 4–15)
+	r, err := card.Transmit([]byte{0xFF, 0xB0, 0x00, 0x04, 0x30})
+	if err == nil && len(r) >= 2 && r[len(r)-2] == 0x90 && r[len(r)-1] == 0x00 && len(r) > 2 {
+		log.Printf("[nfc] bulk read ok (%d bytes)", len(r)-2)
+		return r[:len(r)-2]
+	}
+	log.Printf("[nfc] bulk read failed (sw=%X), trying chunks", r)
+
+	// Attempt 2: read 16 bytes at a time (one native MIFARE READ per call)
+	var buf []byte
+	for page := byte(4); page <= 12; page += 4 {
+		r, err := card.Transmit([]byte{0xFF, 0xB0, 0x00, page, 0x10})
+		if err != nil || len(r) < 2 || r[len(r)-2] != 0x90 {
+			log.Printf("[nfc] chunk read page %d failed", page)
+			break
+		}
+		buf = append(buf, r[:len(r)-2]...)
+	}
+	return buf
+}
+
 // ── PC/SC NFC polling ─────────────────────────────────────────────────────────
 
 func runNFC() {
@@ -224,11 +248,13 @@ func poll(ctx *scard.Context) {
 		lastUID = uid
 
 		id := ""
-		ndefResp, err := card.Transmit([]byte{0xFF, 0xB0, 0x00, 0x04, 0x30})
-		if err == nil && len(ndefResp) >= 2 && ndefResp[len(ndefResp)-2] == 0x90 {
-			id = parseNdef(ndefResp[:len(ndefResp)-2])
+		ndefData := readNdef(card)
+		if len(ndefData) > 0 {
+			id = parseNdef(ndefData)
+			log.Printf("[nfc] raw ndef (%d bytes): %s", len(ndefData), hex.EncodeToString(ndefData))
 		}
 		if id == "" {
+			log.Printf("[nfc] no ndef parsed, using uid")
 			id = uid
 		}
 
