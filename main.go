@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -10,8 +11,12 @@ import (
 	"time"
 
 	"github.com/ebfe/scard"
+	"github.com/getlantern/systray"
 	"github.com/gorilla/websocket"
 )
+
+//go:embed icon.png
+var iconData []byte
 
 const wsPort = "8765"
 
@@ -21,6 +26,7 @@ var (
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
+	mStatus *systray.MenuItem
 )
 
 type Msg struct {
@@ -37,6 +43,13 @@ func broadcast(m Msg) {
 	}
 }
 
+func setStatus(text string) {
+	log.Printf("[bridge] %s", text)
+	if mStatus != nil {
+		mStatus.SetTitle(text)
+	}
+}
+
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -46,7 +59,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	clients[conn] = true
 	n := len(clients)
 	mu.Unlock()
-	log.Printf("[ws] browser connected (%d active)", n)
+	setStatus("Browser connected — tap a card")
 	_ = conn.WriteJSON(Msg{Type: "ready"})
 
 	defer func() {
@@ -55,7 +68,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		n = len(clients)
 		mu.Unlock()
 		conn.Close()
-		log.Printf("[ws] browser disconnected (%d active)", n)
+		if n == 0 {
+			setStatus("Waiting for browser...")
+		}
 	}()
 
 	for {
@@ -151,11 +166,10 @@ func runNFC() {
 	for {
 		ctx, err := scard.EstablishContext()
 		if err != nil {
-			log.Printf("[nfc] PC/SC unavailable: %v — retry in 3s", err)
+			setStatus("PC/SC unavailable — retrying...")
 			time.Sleep(3 * time.Second)
 			continue
 		}
-		log.Println("[nfc] PC/SC ready")
 		poll(ctx)
 		ctx.Release()
 		time.Sleep(2 * time.Second)
@@ -170,9 +184,9 @@ func poll(ctx *scard.Context) {
 		readers, err := ctx.ListReaders()
 		if err != nil || len(readers) == 0 {
 			if activeReader != "" {
-				log.Println("[nfc] reader removed, waiting...")
 				activeReader = ""
 				lastUID = ""
+				setStatus("Reader removed — plug in reader")
 			}
 			time.Sleep(2 * time.Second)
 			continue
@@ -181,19 +195,18 @@ func poll(ctx *scard.Context) {
 		if readers[0] != activeReader {
 			activeReader = readers[0]
 			lastUID = ""
-			log.Printf("[nfc] reader ready: %s", activeReader)
+			setStatus("Reader ready — tap a card")
 		}
 
 		card, err := ctx.Connect(activeReader, scard.ShareShared, scard.ProtocolAny)
 		if err != nil {
 			if lastUID != "" {
-				lastUID = "" // card removed
+				lastUID = ""
 			}
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 
-		// FF CA 00 00 00 — Get UID
 		resp, err := card.Transmit([]byte{0xFF, 0xCA, 0x00, 0x00, 0x00})
 		if err != nil || len(resp) < 2 || resp[len(resp)-2] != 0x90 {
 			_ = card.Disconnect(scard.LeaveCard)
@@ -210,7 +223,6 @@ func poll(ctx *scard.Context) {
 		}
 		lastUID = uid
 
-		// FF B0 00 04 30 — Read NDEF (pages 4–15, 48 bytes)
 		id := ""
 		ndefResp, err := card.Transmit([]byte{0xFF, 0xB0, 0x00, 0x04, 0x30})
 		if err == nil && len(ndefResp) >= 2 && ndefResp[len(ndefResp)-2] == 0x90 {
@@ -220,7 +232,7 @@ func poll(ctx *scard.Context) {
 			id = uid
 		}
 
-		log.Printf("[nfc] card → %s", id)
+		setStatus("Card scanned: " + id)
 		broadcast(Msg{Type: "card", ID: id})
 
 		_ = card.Disconnect(scard.LeaveCard)
@@ -228,18 +240,36 @@ func poll(ctx *scard.Context) {
 	}
 }
 
-// ── Entry point ───────────────────────────────────────────────────────────────
+// ── System tray + entry point ─────────────────────────────────────────────────
+
+func onReady() {
+	systray.SetIcon(iconData)
+	systray.SetTooltip("Felaris NFC Bridge")
+
+	mStatus = systray.AddMenuItem("Starting...", "")
+	mStatus.Disable()
+	systray.AddSeparator()
+	mPort := systray.AddMenuItem("ws://localhost:"+wsPort, "")
+	mPort.Disable()
+	systray.AddSeparator()
+	mQuit := systray.AddMenuItem("Quit NFC Bridge", "")
+
+	go func() {
+		<-mQuit.ClickedCh
+		systray.Quit()
+	}()
+
+	go runNFC()
+	go func() {
+		http.HandleFunc("/", wsHandler)
+		setStatus("Waiting for reader...")
+		if err := http.ListenAndServe(":"+wsPort, nil); err != nil {
+			log.Fatalf("WebSocket server: %v", err)
+		}
+	}()
+}
 
 func main() {
 	log.SetFlags(log.Ltime)
-	log.Printf("Felaris NFC Bridge  —  ws://localhost:%s", wsPort)
-	log.Println("Plug in your ACR122U and tap a card...")
-
-	go runNFC()
-
-	http.HandleFunc("/", wsHandler)
-	log.Printf("Listening on :%s", wsPort)
-	if err := http.ListenAndServe(":"+wsPort, nil); err != nil {
-		log.Fatalf("Server: %v", err)
-	}
+	systray.Run(onReady, func() {})
 }
