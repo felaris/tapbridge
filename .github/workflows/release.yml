@@ -29,6 +29,9 @@ jobs:
       - name: Make executables
         run: chmod +x dist/felaris-nfc-bridge-mac-*
 
+      - name: Copy install script
+        run: cp install.sh dist/install.sh
+
       - uses: actions/upload-artifact@v4
         with:
           name: mac-binaries
@@ -80,7 +83,27 @@ jobs:
           body: |
             ## Felaris NFC Bridge ${{ github.ref_name }}
 
-            Download the right file for your machine, then run it before opening the web app.
+            ### Mac — one-line install (M1 / M2 / M3 / M4 and Intel)
+
+            Open **Terminal** and run:
+
+            ```bash
+            curl -fsSL https://github.com/felaris/felaris-nfc-bridge/releases/latest/download/install.sh | bash
+            ```
+
+            This handles the macOS security prompt automatically — no Apple Developer account needed.
+
+            ---
+
+            ### Manual download
+
+            If you prefer to download the binary directly, macOS will block it by default.
+            After downloading, run this once in Terminal to unblock it:
+
+            ```bash
+            xattr -d com.apple.quarantine ~/Downloads/felaris-nfc-bridge-mac-arm64
+            chmod +x ~/Downloads/felaris-nfc-bridge-mac-arm64
+            ```
 
             | File | Platform |
             |------|----------|
@@ -88,9 +111,11 @@ jobs:
             | `felaris-nfc-bridge-mac-intel` | Mac — Intel chip |
             | `felaris-nfc-bridge-windows.exe` | Windows 10 / 11 (64-bit) |
 
+            ---
+
             ### How to use
             1. Plug in your ACR122U
-            2. Run the bridge for your platform
+            2. Run the bridge (`felaris-nfc-bridge` in Terminal, or double-click)
             3. Open Chrome → go to the Orange Health site → NFC tab → Ready to Read
             4. Tap the card
           files: dist/*
