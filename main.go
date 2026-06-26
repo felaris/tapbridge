@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -27,11 +28,18 @@ var (
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 	mStatus *systray.MenuItem
+	writeCh = make(chan writeReq, 1)
 )
 
 type Msg struct {
-	Type string `json:"type"`
-	ID   string `json:"id,omitempty"`
+	Type    string `json:"type"`
+	ID      string `json:"id,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type writeReq struct {
+	id   string
+	conn *websocket.Conn
 }
 
 func broadcast(m Msg) {
@@ -57,7 +65,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	mu.Lock()
 	clients[conn] = true
-	n := len(clients)
 	mu.Unlock()
 	setStatus("Browser connected — tap a card")
 	_ = conn.WriteJSON(Msg{Type: "ready"})
@@ -65,7 +72,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		mu.Lock()
 		delete(clients, conn)
-		n = len(clients)
+		n := len(clients)
 		mu.Unlock()
 		conn.Close()
 		if n == 0 {
@@ -74,8 +81,21 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
 			break
+		}
+		var msg Msg
+		if json.Unmarshal(raw, &msg) != nil {
+			continue
+		}
+		if msg.Type == "write" && msg.ID != "" {
+			select {
+			case writeCh <- writeReq{id: msg.ID, conn: conn}:
+				setStatus("Ready to write — tap card")
+			default:
+				_ = conn.WriteJSON(Msg{Type: "write_error", Message: "another write is pending"})
+			}
 		}
 	}
 }
@@ -184,6 +204,49 @@ func readNdef(card *scard.Card) []byte {
 	return buf
 }
 
+// ── NDEF writing ──────────────────────────────────────────────────────────────
+
+// buildTextNdef encodes text as a well-known Text NDEF record wrapped in TLV.
+func buildTextNdef(text string) []byte {
+	lang := "en"
+	payload := make([]byte, 0, 1+len(lang)+len(text))
+	payload = append(payload, byte(len(lang)))
+	payload = append(payload, []byte(lang)...)
+	payload = append(payload, []byte(text)...)
+
+	// MB=1 ME=1 SR=1 TNF=0x01 (Well-Known) | type_len=1 | payload_len | 'T' | payload
+	record := []byte{0xD1, 0x01, byte(len(payload)), 'T'}
+	record = append(record, payload...)
+
+	// TLV: tag 0x03 | length | NDEF message | 0xFE terminator
+	msg := []byte{0x03, byte(len(record))}
+	msg = append(msg, record...)
+	msg = append(msg, 0xFE)
+
+	// Pad to 4-byte page boundary
+	for len(msg)%4 != 0 {
+		msg = append(msg, 0x00)
+	}
+	return msg
+}
+
+// writeNdef writes NDEF data to the card starting at page 4, 4 bytes per page.
+func writeNdef(card *scard.Card, data []byte) error {
+	for i := 0; i < len(data); i += 4 {
+		page := byte(4 + i/4)
+		chunk := data[i : i+4]
+		cmd := append([]byte{0xFF, 0xD6, 0x00, page, 0x04}, chunk...)
+		r, err := card.Transmit(cmd)
+		if err != nil {
+			return fmt.Errorf("write page %d: %w", page, err)
+		}
+		if len(r) < 2 || r[len(r)-2] != 0x90 {
+			return fmt.Errorf("write page %d: status %X", page, r)
+		}
+	}
+	return nil
+}
+
 // ── PC/SC NFC polling ─────────────────────────────────────────────────────────
 
 func runNFC() {
@@ -240,6 +303,28 @@ func poll(ctx *scard.Context) {
 		}
 
 		uid := hex.EncodeToString(resp[:len(resp)-2])
+
+		// Write mode: check for a pending write request before doing a read
+		select {
+		case req := <-writeCh:
+			ndefData := buildTextNdef(req.id)
+			if err := writeNdef(card, ndefData); err != nil {
+				log.Printf("[nfc] write failed: %v", err)
+				setStatus("Write failed — try again")
+				_ = req.conn.WriteJSON(Msg{Type: "write_error", Message: err.Error()})
+			} else {
+				log.Printf("[nfc] write ok: %s", req.id)
+				setStatus("Write ok: " + req.id)
+				_ = req.conn.WriteJSON(Msg{Type: "write_ok", ID: req.id})
+			}
+			lastUID = uid
+			_ = card.Disconnect(scard.LeaveCard)
+			time.Sleep(500 * time.Millisecond)
+			continue
+		default:
+		}
+
+		// Read mode
 		if uid == lastUID {
 			_ = card.Disconnect(scard.LeaveCard)
 			time.Sleep(500 * time.Millisecond)
