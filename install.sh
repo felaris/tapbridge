@@ -3,7 +3,7 @@ set -e
 
 REPO="felaris/felaris-nfc-bridge"
 
-# Detect architecture
+# Detect architecture now
 ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ]; then
   FILE="felaris-nfc-bridge-mac-arm64"
