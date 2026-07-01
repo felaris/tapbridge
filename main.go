@@ -140,11 +140,7 @@ func parseNdefRecord(msg []byte) string {
 		if 1+langLen >= len(payload) {
 			return ""
 		}
-		text := strings.TrimSpace(string(payload[1+langLen:]))
-		if d := onlyDigits(text); len(d) >= 6 {
-			return d
-		}
-		return text
+		return strings.TrimSpace(string(payload[1+langLen:]))
 	}
 	return ""
 }
@@ -168,16 +164,6 @@ func parseNdef(data []byte) string {
 		i += l
 	}
 	return ""
-}
-
-func onlyDigits(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }
 
 // ── NDEF reading (tries bulk first, falls back to 16-byte chunks) ────────────
