@@ -1,4 +1,4 @@
-module github.com/felaris/felaris-nfc-bridge
+module github.com/felaris/tapbridge
 
 go 1.26.4
 

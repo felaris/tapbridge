@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//go:embed icon.png
+//go:embed assets/icon.png
 var iconData []byte
 
 const wsPort = "8765"
@@ -52,7 +52,7 @@ func broadcast(m Msg) {
 }
 
 func setStatus(text string) {
-	log.Printf("[bridge] %s", text)
+	log.Printf("[tapbridge] %s", text)
 	if mStatus != nil {
 		mStatus.SetTitle(text)
 	}
@@ -341,7 +341,7 @@ func poll(ctx *scard.Context) {
 
 func onReady() {
 	systray.SetIcon(iconData)
-	systray.SetTooltip("Felaris NFC Bridge")
+	systray.SetTooltip("TapBridge")
 
 	mStatus = systray.AddMenuItem("Starting...", "")
 	mStatus.Disable()
@@ -349,7 +349,7 @@ func onReady() {
 	mPort := systray.AddMenuItem("ws://localhost:"+wsPort, "")
 	mPort.Disable()
 	systray.AddSeparator()
-	mQuit := systray.AddMenuItem("Quit NFC Bridge", "")
+	mQuit := systray.AddMenuItem("Quit TapBridge", "")
 
 	go func() {
 		<-mQuit.ClickedCh

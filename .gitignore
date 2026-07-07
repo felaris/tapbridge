@@ -1,3 +1,5 @@
 dist/
 *.exe
 felaris-nfc-bridge-mac-*
+/felaris-nfc-bridge
+.claude
