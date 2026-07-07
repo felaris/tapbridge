@@ -18,13 +18,17 @@ func onReady(cfg Config) {
 
 	go runNFC()
 	go func() {
+		addr := net.JoinHostPort(cfg.Host, cfg.Port)
+		if !isLoopbackHost(cfg.Host) {
+			log.Printf("[tapbridge] WARNING: binding to %s exposes card data beyond localhost", addr)
+		}
 		// Bind the port up front so a conflict (another instance, or another
 		// app already on this port) surfaces in the tray instead of silently
 		// killing the process.
-		ln, err := net.Listen("tcp", ":"+cfg.Port)
+		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			setStatus("Port " + cfg.Port + " in use — is TapBridge already running?")
-			log.Printf("[tapbridge] cannot bind port %s: %v", cfg.Port, err)
+			log.Printf("[tapbridge] cannot bind %s: %v", addr, err)
 			return
 		}
 		setStatus("Waiting for reader...")

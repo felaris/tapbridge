@@ -11,9 +11,9 @@ A lightweight, cross-platform system tray application that bridges a USB NFC car
 
 It runs quietly in your menu bar / system tray, watches for NFC cards, and streams tapped card IDs straight into your web app — no browser extensions, no drivers to configure manually, no native messaging hacks.
 
-<!-- TODO: add a screenshot / GIF of the tray menu here.
-     Place the image in assets/ (e.g. assets/screenshot.png) and reference it:
-     ![TapBridge tray menu](assets/screenshot.png) -->
+| macOS | Windows |
+|:---:|:---:|
+| ![TapBridge running on macOS with the tray menu open](assets/macos-screenshot.png) | ![TapBridge running in a Windows console](assets/windows-screenshot.png) |
 
 ## Contents
 
@@ -112,6 +112,7 @@ Settings are resolved in this order (later wins): built-in defaults → config f
 
 | Setting | CLI flag | Environment variable | Default |
 |---|---|---|---|
+| Bind address | `--host` | `TAPBRIDGE_HOST` | `127.0.0.1` (loopback only) |
 | WebSocket port | `--port` | `TAPBRIDGE_PORT` | `8765` |
 | Allowed origins | `--allow-origin` (comma-separated) | `TAPBRIDGE_ALLOWED_ORIGINS` (comma-separated) | `http://localhost`, `https://localhost`, `http://127.0.0.1`, `https://127.0.0.1` |
 
@@ -119,6 +120,8 @@ Settings are resolved in this order (later wins): built-in defaults → config f
 # Allow a production domain to connect, on a custom port
 tapbridge --port 9000 --allow-origin https://app.example.com
 ```
+
+By default TapBridge binds to **loopback only** (`127.0.0.1`), so the WebSocket is not reachable from other machines on your network. The origin allowlist stops malicious *websites*, but non-browser clients can send any `Origin` header — binding to loopback is what keeps card data on the local machine. Only set `--host 0.0.0.0` (or a LAN IP) if you genuinely need remote access and understand that any device that can reach the port will be able to read scanned card IDs.
 
 An allowlist entry with no port (e.g. `https://app.example.com`) matches that host on **any** port; `http://localhost` likewise matches any `localhost` port, which is convenient for dev servers. If you're serving your web app from anything other than `localhost`, you **must** add its origin — TapBridge no longer accepts connections from arbitrary websites by default.
 

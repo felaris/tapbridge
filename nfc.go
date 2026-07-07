@@ -131,10 +131,20 @@ func poll(ctx *scard.Context) {
 		select {
 		case req := <-writeCh:
 			var ndefData []byte
+			var buildErr error
 			if req.recordType == "uri" {
-				ndefData = buildUriNdef(req.id)
+				ndefData, buildErr = buildUriNdef(req.id)
 			} else {
-				ndefData = buildTextNdef(req.id)
+				ndefData, buildErr = buildTextNdef(req.id)
+			}
+			if buildErr != nil {
+				log.Printf("[nfc] encode failed: %v", buildErr)
+				setStatus("Write failed — value too long")
+				_ = req.conn.WriteJSON(Msg{Type: "write_error", Message: buildErr.Error()})
+				lastUID = uid
+				_ = card.Disconnect(scard.LeaveCard)
+				time.Sleep(500 * time.Millisecond)
+				continue
 			}
 			if err := writeNdef(card, ndefData); err != nil {
 				log.Printf("[nfc] write failed: %v", err)

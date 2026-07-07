@@ -37,6 +37,38 @@ func TestSplitCSV(t *testing.T) {
 	}
 }
 
+func TestIsLoopbackHost(t *testing.T) {
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"", true},
+		{"127.0.0.1", true},
+		{"localhost", true},
+		{"::1", true},
+		{"[::1]", true},
+		{"127.0.0.5", true},
+		{"0.0.0.0", false},
+		{"192.168.1.10", false},
+		{"example.com", false},
+	}
+	for _, c := range cases {
+		if got := isLoopbackHost(c.host); got != c.want {
+			t.Errorf("isLoopbackHost(%q) = %v, want %v", c.host, got, c.want)
+		}
+	}
+}
+
+func TestDefaultConfigBindsLoopback(t *testing.T) {
+	cfg := defaultConfig()
+	if cfg.Host != "127.0.0.1" {
+		t.Errorf("default host = %q, want 127.0.0.1", cfg.Host)
+	}
+	if !isLoopbackHost(cfg.Host) {
+		t.Error("default host must be loopback")
+	}
+}
+
 func TestDefaultConfigAllowsLocalhostOnly(t *testing.T) {
 	cfg := defaultConfig()
 	if cfg.Port != "8765" {

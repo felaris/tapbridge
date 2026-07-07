@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // ── NDEF parsing ──────────────────────────────────────────────────────────────
 
@@ -78,20 +81,31 @@ var uriPrefixes = []string{"", "http://www.", "https://www.", "http://", "https:
 // buildUriNdef picks the longest matching prefix (smallest payload).
 var uriPrefixOrder = []int{2, 1, 4, 3}
 
+// maxRecordLen is the largest NDEF record this bridge encodes. Records use the
+// short-record form (1-byte payload length) inside a single-byte-length TLV, so
+// the record must fit in one byte; 0xFF is reserved as the TLV 3-byte-length
+// marker, leaving 0xFE (254) as the maximum. Larger inputs would overflow the
+// length bytes and produce a malformed message.
+const maxRecordLen = 0xFE
+
 // wrapTlv wraps a raw NDEF record in a TLV block, terminated and padded to a
-// 4-byte page boundary for writing to the card.
-func wrapTlv(record []byte) []byte {
+// 4-byte page boundary for writing to the card. It errors if the record is too
+// large for the single-byte TLV length field.
+func wrapTlv(record []byte) ([]byte, error) {
+	if len(record) > maxRecordLen {
+		return nil, fmt.Errorf("ndef record too large: %d bytes (max %d)", len(record), maxRecordLen)
+	}
 	msg := []byte{0x03, byte(len(record))}
 	msg = append(msg, record...)
 	msg = append(msg, 0xFE)
 	for len(msg)%4 != 0 {
 		msg = append(msg, 0x00)
 	}
-	return msg
+	return msg, nil
 }
 
 // buildTextNdef encodes text as a well-known Text NDEF record wrapped in TLV.
-func buildTextNdef(text string) []byte {
+func buildTextNdef(text string) ([]byte, error) {
 	lang := "en"
 	payload := make([]byte, 0, 1+len(lang)+len(text))
 	payload = append(payload, byte(len(lang)))
@@ -109,7 +123,7 @@ func buildTextNdef(text string) []byte {
 // possible. Note: parseNdefRecord only extracts an ID from URLs containing
 // "/verify/<id>" — a plain URI without that segment writes fine but this
 // bridge's own reader will fall back to the card's raw UID when it taps it.
-func buildUriNdef(uri string) []byte {
+func buildUriNdef(uri string) ([]byte, error) {
 	code := byte(0)
 	rest := uri
 	for _, i := range uriPrefixOrder {

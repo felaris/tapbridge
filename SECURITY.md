@@ -32,13 +32,17 @@ data from NFC cards and can write data to them. Keep the following in mind:
 - **Origin allowlist.** By default, only `localhost` / `127.0.0.1` origins may
   connect. Any other web origin must be explicitly allowlisted via `--allow-origin`
   or `TAPBRIDGE_ALLOWED_ORIGINS`. Do **not** allowlist origins you do not control.
+- **Loopback binding by default.** The server binds to `127.0.0.1` and is not
+  reachable from other machines. Exposing it to the network requires an explicit
+  `--host 0.0.0.0` (or a LAN IP) / `TAPBRIDGE_HOST` override — don't do this
+  unless you also add authentication in front of it.
 - **Origin headers are browser-enforced, not universal.** The `Origin` check
   protects against malicious *websites* in a browser, but a native/local process
   can set any header it wants. Treat the WebSocket as accessible to any local
   program running as your user.
-- **No transport encryption.** The bridge listens on plain `ws://` on the
-  loopback interface. Do not expose the port beyond `localhost` (e.g. via a
-  reverse proxy or port forward) without adding TLS and authentication.
+- **No transport encryption.** The bridge listens on plain `ws://`. Do not expose
+  the port beyond `localhost` (e.g. via a reverse proxy or port forward) without
+  adding TLS and authentication.
 - **Card data is not validated.** IDs read from cards are passed through as-is.
   Treat anything read from an NFC tag as untrusted input in your web app.
 

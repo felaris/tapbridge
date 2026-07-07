@@ -23,7 +23,10 @@ func enableAutoStart() error {
 		return err
 	}
 	defer k.Close()
-	return k.SetStringValue(runValueName, exe)
+	// Quote the path so Windows treats a path containing spaces (e.g.
+	// "C:\Program Files\..." or "C:\Users\Jane Doe\...") as a single argument
+	// rather than launching only the first token at login.
+	return k.SetStringValue(runValueName, `"`+exe+`"`)
 }
 
 func disableAutoStart() error {

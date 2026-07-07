@@ -8,7 +8,11 @@ import (
 func TestBuildTextNdefRoundTrip(t *testing.T) {
 	cases := []string{"abc123", "hello-world_ID.99", "https://example.com/verify/xyz"}
 	for _, text := range cases {
-		data := buildTextNdef(text)
+		data, err := buildTextNdef(text)
+		if err != nil {
+			t.Errorf("buildTextNdef(%q) unexpected error: %v", text, err)
+			continue
+		}
 		if len(data)%4 != 0 {
 			t.Errorf("buildTextNdef(%q) length %d not page-aligned", text, len(data))
 		}
@@ -30,7 +34,11 @@ func TestBuildUriNdefRoundTrip(t *testing.T) {
 		{"ftp://example.com/file", ""},
 	}
 	for _, c := range cases {
-		data := buildUriNdef(c.uri)
+		data, err := buildUriNdef(c.uri)
+		if err != nil {
+			t.Errorf("buildUriNdef(%q) unexpected error: %v", c.uri, err)
+			continue
+		}
 		if len(data)%4 != 0 {
 			t.Errorf("buildUriNdef(%q) length %d not page-aligned", c.uri, len(data))
 		}
@@ -41,7 +49,10 @@ func TestBuildUriNdefRoundTrip(t *testing.T) {
 }
 
 func TestBuildUriNdefPicksLongestPrefix(t *testing.T) {
-	data := buildUriNdef("https://www.example.com/verify/abc")
+	data, err := buildUriNdef("https://www.example.com/verify/abc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	// record layout: [0x03 len 0xD1 0x01 payLen 'U' code ...]
 	code := data[6]
 	if code != 2 { // index of "https://www."
@@ -49,10 +60,30 @@ func TestBuildUriNdefPicksLongestPrefix(t *testing.T) {
 	}
 }
 
+func TestBuildNdefRejectsOversized(t *testing.T) {
+	// A payload larger than a single-byte length field can hold must be
+	// rejected rather than silently truncated into a malformed record.
+	long := strings.Repeat("A", 300)
+	if _, err := buildTextNdef(long); err == nil {
+		t.Error("buildTextNdef(300 bytes) should return an error")
+	}
+	if _, err := buildUriNdef("https://example.com/verify/" + long); err == nil {
+		t.Error("buildUriNdef(oversized) should return an error")
+	}
+	// A value comfortably within range must still succeed.
+	if _, err := buildTextNdef(strings.Repeat("A", 200)); err != nil {
+		t.Errorf("buildTextNdef(200 bytes) unexpected error: %v", err)
+	}
+}
+
 func TestParseNdefIgnoresNonNdefTlv(t *testing.T) {
 	// Lock control TLV (0x01) followed by an NDEF message TLV.
+	rec, err := buildTextNdef("id1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	msg := []byte{0x01, 0x03, 0x00, 0x00, 0x00}
-	msg = append(msg, buildTextNdef("id1")...)
+	msg = append(msg, rec...)
 	if got := parseNdef(msg); got != "id1" {
 		t.Errorf("parseNdef with leading non-NDEF TLV = %q, want %q", got, "id1")
 	}
