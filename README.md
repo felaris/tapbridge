@@ -1,8 +1,19 @@
 # TapBridge
 
+[![Build & Release](https://github.com/felaris/tapbridge/actions/workflows/release.yml/badge.svg)](https://github.com/felaris/tapbridge/actions/workflows/release.yml)
+[![Test](https://github.com/felaris/tapbridge/actions/workflows/test.yml/badge.svg)](https://github.com/felaris/tapbridge/actions/workflows/test.yml)
+[![Latest release](https://img.shields.io/github/v/release/felaris/tapbridge?sort=semver)](https://github.com/felaris/tapbridge/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/felaris/tapbridge)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)](#installation)
+
 A lightweight, cross-platform system tray application that bridges a USB NFC card reader (e.g. **ACR122U**) to any browser-based web app over a local WebSocket connection.
 
 It runs quietly in your menu bar / system tray, watches for NFC cards, and streams tapped card IDs straight into your web app — no browser extensions, no drivers to configure manually, no native messaging hacks.
+
+<!-- TODO: add a screenshot / GIF of the tray menu here.
+     Place the image in assets/ (e.g. assets/screenshot.png) and reference it:
+     ![TapBridge tray menu](assets/screenshot.png) -->
 
 ## Contents
 
