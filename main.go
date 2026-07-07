@@ -1,7 +1,6 @@
 package main
 
 import (
-	_ "embed"
 	"flag"
 	"log"
 	"net"
@@ -9,9 +8,6 @@ import (
 
 	"github.com/getlantern/systray"
 )
-
-//go:embed assets/icon.png
-var iconData []byte
 
 func onReady(cfg Config) {
 	buildTray(cfg)

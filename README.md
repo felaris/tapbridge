@@ -195,12 +195,16 @@ All writes are wrapped in a standard TLV block, padded to a 4-byte page boundary
 ├── autostart_darwin.go        # macOS LaunchAgent-based "Start at Login" (build-tagged: darwin)
 ├── autostart_windows.go       # Windows Registry Run-key "Start at Login" (build-tagged: windows)
 ├── autostart_other.go         # No-op fallback for other platforms
+├── icon_windows.go            # Embeds assets/icon.ico on Windows (LoadImageW needs a real .ico)
+├── icon_other.go              # Embeds assets/icon.png on macOS/Linux
 ├── *_test.go                  # Unit tests for NDEF encode/decode and origin allowlist logic
 ├── go.mod / go.sum            # Go module definition
 ├── assets/
-│   └── icon.png                # System tray icon (embedded into the binary at build time)
+│   ├── icon.png                # Source tray icon (macOS/Linux; embedded at build time)
+│   └── icon.ico                # Windows tray icon, generated from icon.png
 ├── scripts/
-│   └── install.sh              # macOS one-line installer (fetches latest release, clears quarantine)
+│   ├── install.sh              # macOS one-line installer (fetches latest release, clears quarantine)
+│   └── gen_icon.go             # Regenerates assets/icon.ico from assets/icon.png
 ├── .github/
 │   └── workflows/
 │       └── release.yml         # CI: builds Mac (arm64/intel) + Windows binaries and publishes a GitHub release on every push to main
