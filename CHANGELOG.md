@@ -27,6 +27,11 @@ published automatically from `main`. See the
   tag's lock/config pages.
 
 ### Added
+- **Docker image** `felaris/tapbridge` for Linux (amd64 + arm64): headless,
+  bundled pcscd, non-root, built-in health check, with signed provenance and an
+  SBOM. See [docs/docker.md](docs/docker.md).
+- `--headless` mode (and a `-tags notray` build without GTK), `--reader` /
+  `TAPBRIDGE_READER`, and `--healthcheck`.
 - Plain-English error messages with stable error `code`s on `write_error`, and
   a new `error` message type ([docs](docs/protocol.md#error-codes)).
 - Pages from a disallowed origin now receive an explanation (including the
@@ -37,6 +42,9 @@ published automatically from `main`. See the
 - Plain HTTP `GET` health check.
 - NDEF parsing of 3-byte TLV lengths, normal-length records and records with
   an ID field.
+- CI hardening: every GitHub Action pinned to a commit SHA, read-only default
+  token permissions, Docker Hub credentials used only on `main` via a
+  protected environment.
 - Demo page in `examples/browser/`, documentation in `docs/`, a `Makefile`,
   CI on Windows, macOS and Linux, and SHA-256 checksums on releases.
 

@@ -11,6 +11,7 @@ A tiny tray app that streams NFC card taps from a PC/SC reader (like the ACR122U
 [![Test](https://github.com/felaris/tapbridge/actions/workflows/test.yml/badge.svg)](https://github.com/felaris/tapbridge/actions/workflows/test.yml)
 [![Build & Release](https://github.com/felaris/tapbridge/actions/workflows/release.yml/badge.svg)](https://github.com/felaris/tapbridge/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/felaris/tapbridge?sort=semver)](https://github.com/felaris/tapbridge/releases/latest)
+[![Docker image](https://img.shields.io/docker/v/felaris/tapbridge?label=docker&sort=semver)](https://hub.docker.com/r/felaris/tapbridge)
 [![Go version](https://img.shields.io/github/go-mod/go-version/felaris/tapbridge)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -58,7 +59,8 @@ fills that gap with a small local app.
 | **Windows 10/11** (64-bit) | [`tapbridge-windows.exe`](https://github.com/felaris/tapbridge/releases/latest/download/tapbridge-windows.exe) |
 | **macOS** Apple Silicon | [`tapbridge-mac-arm64`](https://github.com/felaris/tapbridge/releases/latest/download/tapbridge-mac-arm64) |
 | **macOS** Intel | [`tapbridge-mac-intel`](https://github.com/felaris/tapbridge/releases/latest/download/tapbridge-mac-intel) |
-| Linux / other | [Build from source](#build-from-source) |
+| **Linux** (amd64, arm64 / Raspberry Pi) | Docker: `docker pull felaris/tapbridge` ([guide](docs/docker.md)) |
+| Other | [Build from source](#build-from-source) |
 
 **Windows:** run the `.exe`. TapBridge isn't code-signed yet, so SmartScreen
 may warn: choose **More info → Run anyway**. It runs in the notification
@@ -69,6 +71,14 @@ area (click **^** by the clock). There's no console window.
 ```bash
 curl -fsSL https://github.com/felaris/tapbridge/releases/latest/download/install.sh | bash
 ```
+
+**Linux (Docker):**
+
+```bash
+docker run -d --name tapbridge --restart unless-stopped --device /dev/bus/usb -p 127.0.0.1:8765:8765 felaris/tapbridge
+```
+
+Docker is for Linux hosts. On macOS and Windows, Docker can't easily reach USB readers, so use the native apps there ([why](docs/docker.md#where-docker-makes-sense)).
 
 You'll also need the PC/SC driver for your reader if the OS doesn't include
 one (for the ACR122U on Windows: ACS's *PC/SC Driver*).
@@ -109,6 +119,7 @@ Full reference: [docs/protocol.md](docs/protocol.md).
 | [Protocol](docs/protocol.md) | Messages, error codes, examples |
 | [Configuration](docs/configuration.md) | Flags, environment variables, allowed origins, config and log files |
 | [Troubleshooting](docs/troubleshooting.md) | Windows, macOS, browser and tag problems |
+| [Docker](docs/docker.md) | Running headless on Linux / Raspberry Pi |
 | [Hardware](docs/hardware.md) | Supported readers and tags |
 | [FAQ](docs/faq.md) | Web NFC / Web Serial / WebUSB, security, multi-client |
 | [Architecture](docs/architecture.md) | How the code is organised |

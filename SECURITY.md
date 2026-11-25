@@ -50,5 +50,16 @@ data from NFC cards and can write data to them. Keep the following in mind:
 - **Card data is not validated.** IDs read from cards are passed through as-is.
   Treat anything read from an NFC tag as untrusted input in your web app.
 
+## Build and release pipeline
+
+- Releases and Docker images are built only by GitHub Actions on the `main`
+  branch. Pull requests (including from forks) run tests with a read-only
+  token and **no secrets**.
+- The Docker Hub token is a GitHub encrypted secret scoped to a `dockerhub`
+  environment that only `main` can use. GitHub masks it in logs.
+- Every third-party action is pinned to a full commit SHA, and Dependabot
+  proposes updates as reviewable pull requests.
+- Docker images carry signed build provenance and an SBOM.
+
 If any of these defaults don't fit your deployment, please open an issue to
 discuss hardening options (e.g. shared-token authentication).

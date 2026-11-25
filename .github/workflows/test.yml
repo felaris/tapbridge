@@ -1,5 +1,7 @@
 name: Test
 
+# Safe for pull requests from forks: read-only token, no secrets used, nothing
+# is published. (Never switch this to `pull_request_target`.)
 on:
   push:
     branches-ignore:
@@ -7,12 +9,21 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -28,8 +39,10 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
@@ -43,6 +56,9 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      - name: go vet (headless build)
+        run: go vet -tags notray ./...
+
       - name: go test
         # The race detector needs cgo; Windows runners ship MinGW gcc.
         run: go test -race ./...
@@ -55,3 +71,38 @@ jobs:
           else
             go build -o dist/tapbridge ./cmd/tapbridge
           fi
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image (not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: tapbridge:ci
+          build-args: VERSION=ci
+          cache-from: type=gha
+
+      - name: Smoke test
+        run: |
+          docker run --rm tapbridge:ci --version
+          docker run -d --name tb -p 127.0.0.1:8765:8765 tapbridge:ci
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8765/ && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/ | grep -q "TapBridge is running"
+          # TapBridge itself must not run as root (only pcscd does).
+          docker top tb -o pid,user,comm | tee /dev/stderr | grep -E 'tapbridge$' | grep -qvE '^[0-9]+ +root' \
+            || (echo "expected tapbridge to run as a non-root user"; exit 1)
+          docker exec tb tapbridge --healthcheck
+          docker logs tb
+          docker stop tb

@@ -18,7 +18,7 @@ PC/SC service.
 ## Layout
 
 ```
-cmd/tapbridge/        entry point: flags, logging, wiring, listening
+cmd/tapbridge/        entry point: flags, wiring, listening; ui_tray.go / headless.go front-ends
 internal/config/      settings layering, persistence, origin allowlist
 internal/ndef/        NDEF Text/URI encode + decode (pure, no I/O)
 internal/reader/      PC/SC polling, reader selection, card I/O, readable errors
@@ -29,6 +29,7 @@ internal/logging/     log file + "Open Log File"
 assets/               embedded tray icons
 scripts/              install.sh (macOS), gen_icon.go
 examples/browser/     a standalone demo page
+Dockerfile, docker/   headless Linux image (pcscd bundled, non-root)
 docs/                 user and developer documentation
 ```
 

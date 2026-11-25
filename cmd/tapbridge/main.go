@@ -1,5 +1,8 @@
-// Command tapbridge is a system tray app that bridges a USB PC/SC NFC reader
-// to web pages over a local WebSocket. See https://github.com/felaris/tapbridge.
+// Command tapbridge bridges a USB PC/SC NFC reader to web pages over a local
+// WebSocket. It normally runs as a system tray app; with --headless (or when
+// built with -tags notray, as in the Docker image) it runs without a GUI.
+//
+// See https://github.com/felaris/tapbridge.
 package main
 
 import (
@@ -11,33 +14,53 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"syscall"
+	"time"
 
-	"github.com/getlantern/systray"
-
-	"github.com/felaris/tapbridge/assets"
-	"github.com/felaris/tapbridge/internal/autostart"
 	"github.com/felaris/tapbridge/internal/config"
 	"github.com/felaris/tapbridge/internal/logging"
 	"github.com/felaris/tapbridge/internal/reader"
 	"github.com/felaris/tapbridge/internal/server"
-	"github.com/felaris/tapbridge/internal/tray"
 )
 
 // version is set at build time with -ldflags "-X main.version=v1.2.3".
 var version = "dev"
+
+// UI is what the core reports status to: the tray menu, or the log when
+// running headless.
+type UI interface {
+	SetStatus(text string)
+	SetLastScanned(id string)
+	SetReaders(readers []string, active string)
+}
+
+// app holds what both front-ends need.
+type app struct {
+	store   *config.Store
+	logPath string
+}
 
 func main() {
 	var (
 		host        = flag.String("host", "", "address to bind (default 127.0.0.1, loopback only; 0.0.0.0 exposes card data to your network)")
 		port        = flag.String("port", "", "WebSocket port (default 8765)")
 		origins     = flag.String("allow-origin", "", "comma-separated browser origins allowed to connect (default: localhost and 127.0.0.1 only)")
+		readerName  = flag.String("reader", "", "name of the reader to use (default: pick automatically)")
+		headless    = flag.Bool("headless", envBool("TAPBRIDGE_HEADLESS"), "run without the system tray (for servers and containers)")
+		healthcheck = flag.Bool("healthcheck", false, "exit 0 if a TapBridge is answering on the configured port, 1 otherwise")
 		showVersion = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Parse()
+
 	if *showVersion {
 		fmt.Println("tapbridge", version)
 		return
+	}
+
+	cfg := config.Load(config.Overrides{Host: *host, Port: *port, Origins: *origins, Reader: *readerName})
+	if *healthcheck {
+		os.Exit(checkHealth(cfg))
 	}
 
 	dir, _ := config.Dir()
@@ -47,57 +70,27 @@ func main() {
 		log.Printf("[tapbridge] log file: %s", logPath)
 	}
 
-	store := config.NewStore(config.Load(config.Overrides{Host: *host, Port: *port, Origins: *origins}))
-
-	systray.Run(func() { start(store, logPath) }, func() {})
+	a := &app{store: config.NewStore(cfg), logPath: logPath}
+	runUI(a, *headless) // blocks until quit
 }
 
-// start runs once the tray is ready.
-func start(store *config.Store, logPath string) {
-	cfg := store.Get()
-
-	t := tray.New(tray.Options{
-		Icon:      assets.Icon,
-		Version:   version,
-		URL:       "ws://localhost:" + cfg.Port,
-		LogPath:   logPath,
-		AutoStart: autostart.IsEnabled(),
-		OnSelectReader: func(name string) {
-			if err := store.Update(func(c *config.Config) { c.SelectedReader = name }); err != nil {
-				log.Printf("[tapbridge] couldn't save reader choice: %v", err)
-			}
-		},
-		OnAutoStart: func(enable bool) error {
-			var err error
-			if enable {
-				err = autostart.Enable()
-			} else {
-				err = autostart.Disable()
-			}
-			if err == nil {
-				_ = store.Update(func(c *config.Config) { c.AutoStart = enable })
-			}
-			return err
-		},
-		OnOpenLog: func() {
-			if err := logging.Open(logPath); err != nil {
-				log.Printf("[tapbridge] couldn't open the log file: %v", err)
-			}
-		},
-	})
+// start wires the reader and the WebSocket server to ui. It returns false if
+// the server could not start.
+func (a *app) start(ui UI) bool {
+	cfg := a.store.Get()
 
 	var srv *server.Server
 	nfc := reader.New(reader.Events{
-		Status:  t.SetStatus,
-		Readers: t.SetReaders,
+		Status:  ui.SetStatus,
+		Readers: ui.SetReaders,
 		Card: func(id string) {
-			t.SetLastScanned(id)
+			ui.SetLastScanned(id)
 			srv.Broadcast(server.Msg{Type: server.TypeCard, ID: id})
 		},
-	}, func() string { return store.Get().SelectedReader })
+	}, func() string { return a.store.Get().SelectedReader })
 
 	srv = server.New(server.Options{
-		AllowedOrigins:  func() []string { return store.Get().AllowedOrigins },
+		AllowedOrigins:  func() []string { return a.store.Get().AllowedOrigins },
 		IsAllowedOrigin: config.IsAllowedOrigin,
 		OnWrite: func(id, recordType string, reply func(server.Msg), gone <-chan struct{}) error {
 			err := nfc.RequestWrite(reader.WriteRequest{
@@ -115,25 +108,25 @@ func start(store *config.Store, logPath string) {
 			if err != nil {
 				return reader.Explain(err)
 			}
-			t.SetStatus("Ready to write — tap a card")
+			ui.SetStatus("Ready to write — tap a card")
 			return nil
 		},
 	})
 
 	if err := listen(cfg, srv); err != nil {
-		t.SetStatus(err.Error())
-		log.Printf("[tapbridge] %v", err)
-		return
+		ui.SetStatus(err.Error())
+		return false
 	}
 	go nfc.Run()
+	return true
 }
 
 // listen starts the WebSocket server. It binds before returning so that a
-// port conflict is reported in the tray rather than killing the process.
+// port conflict is reported rather than killing the process.
 func listen(cfg config.Config, handler http.Handler) error {
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)
 	if !config.IsLoopbackHost(cfg.Host) {
-		log.Printf("[tapbridge] WARNING: listening on %s exposes card data beyond this computer", addr)
+		log.Printf("[tapbridge] NOTE: listening on %s — reachable from outside this machine unless a firewall or container port mapping restricts it", addr)
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -175,4 +168,33 @@ func explainListenError(cfg config.Config, err error) error {
 func isWindowsAddrInUse(err error) bool {
 	var errno syscall.Errno
 	return errors.As(err, &errno) && errno == 10048
+}
+
+// checkHealth reports whether a TapBridge answers on the configured port.
+// Used by the Docker HEALTHCHECK, which has no curl in the image.
+func checkHealth(cfg config.Config) int {
+	host := cfg.Host
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort(host, cfg.Port) + "/")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "unhealthy:", err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "unhealthy: status", resp.Status)
+		return 1
+	}
+	return 0
+}
+
+func envBool(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }

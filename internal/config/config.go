@@ -20,6 +20,7 @@ const (
 	EnvHost    = "TAPBRIDGE_HOST"
 	EnvPort    = "TAPBRIDGE_PORT"
 	EnvOrigins = "TAPBRIDGE_ALLOWED_ORIGINS"
+	EnvReader  = "TAPBRIDGE_READER"
 )
 
 // Config holds runtime settings.
@@ -37,6 +38,7 @@ type Overrides struct {
 	Host    string
 	Port    string
 	Origins string // comma-separated
+	Reader  string // preferred reader name
 }
 
 // Default returns the built-in settings.
@@ -122,6 +124,9 @@ func applyOverrides(cfg Config, o Overrides, getenv func(string) string) Config 
 	}
 	if v := pick(o.Origins, EnvOrigins); v != "" {
 		cfg.AllowedOrigins = SplitCSV(v)
+	}
+	if v := pick(o.Reader, EnvReader); v != "" {
+		cfg.SelectedReader = v
 	}
 	return cfg
 }

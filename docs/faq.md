@@ -61,9 +61,10 @@ npx wscat -c ws://localhost:8765
 
 ## Does it work on Linux?
 
-It builds and runs (it needs `pcscd`, plus GTK and AppIndicator for the tray),
-but there's no official Linux release binary yet. Build it from source and
-please report how it goes.
+Yes. The easiest way is the Docker image (amd64 and arm64, including
+Raspberry Pi), see [docker.md](docker.md). You can also build from source.
+It needs `pcscd`, plus GTK and AppIndicator for the tray, or use
+`--headless` / `-tags notray` to skip the tray entirely.
 
 ## Can I write raw data, or to MIFARE Classic?
 

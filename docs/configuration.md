@@ -9,6 +9,9 @@ Settings are resolved in this order, later winning:
 | Bind address | `--host` | `TAPBRIDGE_HOST` | `127.0.0.1` (this computer only) |
 | WebSocket port | `--port` | `TAPBRIDGE_PORT` | `8765` |
 | Allowed origins | `--allow-origin` (comma-separated) | `TAPBRIDGE_ALLOWED_ORIGINS` (comma-separated) | `http://localhost`, `https://localhost`, `http://127.0.0.1`, `https://127.0.0.1` |
+| Preferred reader | `--reader` | `TAPBRIDGE_READER` | automatic (contactless slot first) |
+| Run without the tray | `--headless` | `TAPBRIDGE_HEADLESS=1` | off (always on in Docker / `-tags notray` builds) |
+| Health check | `--healthcheck` | — | exits 0 if a TapBridge answers on the configured port |
 | Print version | `--version` | — | — |
 
 ```bash

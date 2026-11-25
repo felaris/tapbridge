@@ -1,10 +1,24 @@
 name: Build & Release
 
+# Runs only for pushes to main (i.e. after a PR is merged by a maintainer) or
+# a manual run by someone with write access. It never runs for pull requests,
+# so code from forks never gets near the Docker Hub credentials.
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+
+# Default to read-only; jobs ask for more only where needed.
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: felaris/tapbridge
 
 jobs:
   version:
@@ -16,35 +30,43 @@ jobs:
         id: bump
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
-          latest=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || echo "v1.1.0")
+          latest=$(gh api "repos/$REPO/releases/latest" --jq '.tag_name' 2>/dev/null || echo "v1.1.0")
           version=${latest#v}
           major=$(echo "$version" | cut -d. -f1)
           minor=$(echo "$version" | cut -d. -f2)
           patch=$(echo "$version" | cut -d. -f3)
           new_tag="v${major}.${minor}.$((patch + 1))"
+          if ! echo "$new_tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Unexpected version '$new_tag'" >&2; exit 1
+          fi
           echo "tag=$new_tag" >> "$GITHUB_OUTPUT"
           echo "Bumping $latest → $new_tag"
 
   build-mac:
     needs: version
     runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
       - name: Build — Apple Silicon (arm64)
         run: |
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
-            go build -ldflags="-s -w -X main.version=${{ needs.version.outputs.tag }}" -o dist/tapbridge-mac-arm64 ./cmd/tapbridge
+            go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o dist/tapbridge-mac-arm64 ./cmd/tapbridge
 
       - name: Build — Intel (amd64)
         run: |
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
-            go build -ldflags="-s -w -X main.version=${{ needs.version.outputs.tag }}" -o dist/tapbridge-mac-intel ./cmd/tapbridge
+            go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o dist/tapbridge-mac-intel ./cmd/tapbridge
 
       - name: Make executables
         run: chmod +x dist/tapbridge-mac-*
@@ -52,7 +74,7 @@ jobs:
       - name: Copy install script
         run: cp scripts/install.sh dist/install.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mac-binaries
           path: dist/
@@ -60,10 +82,14 @@ jobs:
   build-windows:
     needs: version
     runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
@@ -74,9 +100,9 @@ jobs:
         run: |
           $env:CGO_ENABLED = "1"
           $env:CC = "gcc"
-          go build -ldflags="-s -w -H windowsgui -X main.version=${{ needs.version.outputs.tag }}" -o dist\tapbridge-windows.exe ./cmd/tapbridge
+          go build -trimpath -ldflags="-s -w -H windowsgui -X main.version=$env:VERSION" -o dist\tapbridge-windows.exe ./cmd/tapbridge
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-binary
           path: dist\
@@ -85,14 +111,14 @@ jobs:
     needs: [version, build-mac, build-windows]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # create the tag and the GitHub release
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: mac-binaries
           path: dist/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: windows-binary
           path: dist/
@@ -103,13 +129,14 @@ jobs:
       - name: Create git tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+          SHA: ${{ github.sha }}
         run: |
-          gh api repos/${{ github.repository }}/git/refs \
-            -f ref="refs/tags/${{ needs.version.outputs.tag }}" \
-            -f sha="${{ github.sha }}"
+          gh api "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
           name: "TapBridge ${{ needs.version.outputs.tag }}"
@@ -124,6 +151,7 @@ jobs:
             | `tapbridge-mac-arm64` | macOS — Apple Silicon (M1 and later) |
             | `tapbridge-mac-intel` | macOS — Intel |
             | `SHA256SUMS.txt` | Checksums for verifying downloads |
+            | Docker | `docker pull felaris/tapbridge:${{ needs.version.outputs.tag }}` (Linux, amd64 + arm64) |
 
             ### macOS — one-line install
 
@@ -135,6 +163,15 @@ jobs:
 
             Download `tapbridge-windows.exe` and run it. SmartScreen may warn about an unsigned app — choose **More info → Run anyway**. TapBridge runs in the notification area (tray), with no console window.
 
+            ### Linux / Docker
+
+            ```bash
+            docker run -d --name tapbridge --restart unless-stopped \
+              --device /dev/bus/usb -p 127.0.0.1:8765:8765 felaris/tapbridge
+            ```
+
+            See [docs/docker.md](https://github.com/felaris/tapbridge/blob/main/docs/docker.md).
+
             ### Quick start
 
             1. Plug in your NFC reader (e.g. ACR122U) and start TapBridge.
@@ -143,5 +180,54 @@ jobs:
 
             See the [README](https://github.com/felaris/tapbridge#readme) and [troubleshooting guide](https://github.com/felaris/tapbridge/blob/main/docs/troubleshooting.md).
           files: dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    # The Docker Hub token lives in the "dockerhub" environment (or as a repo
+    # secret). Restrict that environment to the main branch in
+    # Settings → Environments so no other branch can ever read the token.
+    environment: dockerhub
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.tag }}
+            type=raw,value=latest
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME || 'felaris' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ needs.version.outputs.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Signed build provenance + SBOM, so users can verify what's inside.
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

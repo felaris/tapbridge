@@ -43,8 +43,10 @@ See [docs/architecture.md](docs/architecture.md). In short:
 make check
 ```
 
-This runs `gofmt`, `go vet` (for your OS and Windows), and the tests with the
-race detector. CI runs the same checks on Linux, Windows and macOS.
+This runs `gofmt`, `go vet` (for your OS, the headless build, and Windows),
+and the tests with the race detector. CI runs the same checks on Linux,
+Windows and macOS, and builds and smoke-tests the Docker image. If you have
+Docker, `make docker` builds the image locally.
 
 ## Guidelines
 
