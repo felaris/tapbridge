@@ -1,10 +1,10 @@
 //go:build !windows
 
-package main
+package assets
 
 import _ "embed"
 
 // macOS and Linux system trays accept PNG icon bytes directly.
 //
-//go:embed assets/icon.png
-var iconData []byte
+//go:embed icon.png
+var Icon []byte

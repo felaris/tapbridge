@@ -34,17 +34,17 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.4'
+          go-version-file: go.mod
 
       - name: Build — Apple Silicon (arm64)
         run: |
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
-            go build -ldflags="-s -w" -o dist/tapbridge-mac-arm64 .
+            go build -ldflags="-s -w -X main.version=${{ needs.version.outputs.tag }}" -o dist/tapbridge-mac-arm64 ./cmd/tapbridge
 
       - name: Build — Intel (amd64)
         run: |
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
-            go build -ldflags="-s -w" -o dist/tapbridge-mac-intel .
+            go build -ldflags="-s -w -X main.version=${{ needs.version.outputs.tag }}" -o dist/tapbridge-mac-intel ./cmd/tapbridge
 
       - name: Make executables
         run: chmod +x dist/tapbridge-mac-*
@@ -65,7 +65,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.4'
+          go-version-file: go.mod
 
       - name: Add MinGW to PATH
         run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -74,7 +74,7 @@ jobs:
         run: |
           $env:CGO_ENABLED = "1"
           $env:CC = "gcc"
-          go build -ldflags="-s -w -H windowsgui" -o dist\tapbridge-windows.exe .
+          go build -ldflags="-s -w -H windowsgui -X main.version=${{ needs.version.outputs.tag }}" -o dist\tapbridge-windows.exe ./cmd/tapbridge
 
       - uses: actions/upload-artifact@v4
         with:
@@ -97,6 +97,9 @@ jobs:
           name: windows-binary
           path: dist/
 
+      - name: Generate checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt
+
       - name: Create git tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -113,41 +116,32 @@ jobs:
           body: |
             ## TapBridge ${{ needs.version.outputs.tag }}
 
-            ### Mac — one-line install (M1 / M2 / M3 / M4 and Intel)
+            ### Downloads
 
-            Open **Terminal** and run:
+            | File | Platform |
+            |------|----------|
+            | `tapbridge-windows.exe` | Windows 10 / 11 (64-bit) |
+            | `tapbridge-mac-arm64` | macOS — Apple Silicon (M1 and later) |
+            | `tapbridge-mac-intel` | macOS — Intel |
+            | `SHA256SUMS.txt` | Checksums for verifying downloads |
+
+            ### macOS — one-line install
 
             ```bash
             curl -fsSL https://github.com/felaris/tapbridge/releases/latest/download/install.sh | bash
             ```
 
-            This handles the macOS security prompt automatically — no Apple Developer account needed.
+            ### Windows
 
-            ---
+            Download `tapbridge-windows.exe` and run it. SmartScreen may warn about an unsigned app — choose **More info → Run anyway**. TapBridge runs in the notification area (tray), with no console window.
 
-            ### Manual download
+            ### Quick start
 
-            If you prefer to download the binary directly, macOS will block it by default.
-            After downloading, run this once in Terminal to unblock it:
+            1. Plug in your NFC reader (e.g. ACR122U) and start TapBridge.
+            2. From a page on `localhost`, connect to `ws://localhost:8765`.
+            3. Tap a card — you receive `{"type":"card","id":"..."}`.
 
-            ```bash
-            xattr -d com.apple.quarantine ~/Downloads/tapbridge-mac-arm64
-            chmod +x ~/Downloads/tapbridge-mac-arm64
-            ```
-
-            | File | Platform |
-            |------|----------|
-            | `tapbridge-mac-arm64` | Mac — Apple Silicon (M1 / M2 / M3 / M4) |
-            | `tapbridge-mac-intel` | Mac — Intel chip |
-            | `tapbridge-windows.exe` | Windows 10 / 11 (64-bit) |
-
-            ---
-
-            ### How to use
-            1. Plug in your ACR122U
-            2. Run the bridge (`tapbridge` in Terminal, or double-click)
-            3. Open Chrome → go to the Orange Health site → NFC tab → Ready to Read
-            4. Tap the card
+            See the [README](https://github.com/felaris/tapbridge#readme) and [troubleshooting guide](https://github.com/felaris/tapbridge/blob/main/docs/troubleshooting.md).
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

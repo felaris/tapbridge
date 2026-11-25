@@ -1,4 +1,4 @@
-package main
+package ndef
 
 import (
 	"strings"
@@ -8,15 +8,15 @@ import (
 func TestBuildTextNdefRoundTrip(t *testing.T) {
 	cases := []string{"abc123", "hello-world_ID.99", "https://example.com/verify/xyz"}
 	for _, text := range cases {
-		data, err := buildTextNdef(text)
+		data, err := BuildText(text)
 		if err != nil {
-			t.Errorf("buildTextNdef(%q) unexpected error: %v", text, err)
+			t.Errorf("BuildText(%q) unexpected error: %v", text, err)
 			continue
 		}
 		if len(data)%4 != 0 {
-			t.Errorf("buildTextNdef(%q) length %d not page-aligned", text, len(data))
+			t.Errorf("BuildText(%q) length %d not page-aligned", text, len(data))
 		}
-		if got := parseNdef(data); got != text {
+		if got := ParseID(data); got != text {
 			t.Errorf("round trip text %q = %q, want %q", text, got, text)
 		}
 	}
@@ -34,22 +34,22 @@ func TestBuildUriNdefRoundTrip(t *testing.T) {
 		{"ftp://example.com/file", ""},
 	}
 	for _, c := range cases {
-		data, err := buildUriNdef(c.uri)
+		data, err := BuildURI(c.uri)
 		if err != nil {
-			t.Errorf("buildUriNdef(%q) unexpected error: %v", c.uri, err)
+			t.Errorf("BuildURI(%q) unexpected error: %v", c.uri, err)
 			continue
 		}
 		if len(data)%4 != 0 {
-			t.Errorf("buildUriNdef(%q) length %d not page-aligned", c.uri, len(data))
+			t.Errorf("BuildURI(%q) length %d not page-aligned", c.uri, len(data))
 		}
-		if got := parseNdef(data); got != c.want {
+		if got := ParseID(data); got != c.want {
 			t.Errorf("round trip uri %q = %q, want %q", c.uri, got, c.want)
 		}
 	}
 }
 
 func TestBuildUriNdefPicksLongestPrefix(t *testing.T) {
-	data, err := buildUriNdef("https://www.example.com/verify/abc")
+	data, err := BuildURI("https://www.example.com/verify/abc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,40 +64,40 @@ func TestBuildNdefRejectsOversized(t *testing.T) {
 	// A payload larger than a single-byte length field can hold must be
 	// rejected rather than silently truncated into a malformed record.
 	long := strings.Repeat("A", 300)
-	if _, err := buildTextNdef(long); err == nil {
-		t.Error("buildTextNdef(300 bytes) should return an error")
+	if _, err := BuildText(long); err == nil {
+		t.Error("BuildText(300 bytes) should return an error")
 	}
-	if _, err := buildUriNdef("https://example.com/verify/" + long); err == nil {
-		t.Error("buildUriNdef(oversized) should return an error")
+	if _, err := BuildURI("https://example.com/verify/" + long); err == nil {
+		t.Error("BuildURI(oversized) should return an error")
 	}
 	// A value comfortably within range must still succeed.
-	if _, err := buildTextNdef(strings.Repeat("A", 200)); err != nil {
-		t.Errorf("buildTextNdef(200 bytes) unexpected error: %v", err)
+	if _, err := BuildText(strings.Repeat("A", 200)); err != nil {
+		t.Errorf("BuildText(200 bytes) unexpected error: %v", err)
 	}
 }
 
 func TestParseNdefIgnoresNonNdefTlv(t *testing.T) {
 	// Lock control TLV (0x01) followed by an NDEF message TLV.
-	rec, err := buildTextNdef("id1")
+	rec, err := BuildText("id1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	msg := []byte{0x01, 0x03, 0x00, 0x00, 0x00}
 	msg = append(msg, rec...)
-	if got := parseNdef(msg); got != "id1" {
+	if got := ParseID(msg); got != "id1" {
 		t.Errorf("parseNdef with leading non-NDEF TLV = %q, want %q", got, "id1")
 	}
 }
 
 func TestParseNdefEmptyData(t *testing.T) {
-	if got := parseNdef(nil); got != "" {
-		t.Errorf("parseNdef(nil) = %q, want empty", got)
+	if got := ParseID(nil); got != "" {
+		t.Errorf("ParseID(nil) = %q, want empty", got)
 	}
 }
 
 func TestParseNdefRecordTruncated(t *testing.T) {
-	if got := parseNdefRecord([]byte{0xD1, 0x01}); got != "" {
-		t.Errorf("parseNdefRecord(truncated) = %q, want empty", got)
+	if got := ParseRecord([]byte{0xD1, 0x01}); got != "" {
+		t.Errorf("ParseRecord(truncated) = %q, want empty", got)
 	}
 }
 
@@ -121,13 +121,13 @@ func TestParseNdefLongTlvAndNormalRecord(t *testing.T) {
 	data := []byte{0x03, 0xFF, byte(len(record) >> 8), byte(len(record))}
 	data = append(data, record...)
 	data = append(data, 0xFE)
-	if got := parseNdef(data); got != text {
+	if got := ParseID(data); got != text {
 		t.Errorf("long TLV parse = %d chars, want %d", len(got), len(text))
 	}
-	if ndefComplete(data[:40]) {
+	if Complete(data[:40]) {
 		t.Error("truncated TLV must not be reported complete")
 	}
-	if !ndefComplete(data) {
+	if !Complete(data) {
 		t.Error("full TLV must be reported complete")
 	}
 }
@@ -137,16 +137,16 @@ func TestParseNdefRecordWithIDField(t *testing.T) {
 	payload := []byte{2, 'e', 'n', 'h', 'i'}
 	record := []byte{0xD9, 0x01, byte(len(payload)), 0x02, 'T', 'a', 'b'}
 	record = append(record, payload...)
-	if got := parseNdefRecord(record); got != "hi" {
+	if got := ParseRecord(record); got != "hi" {
 		t.Errorf("record with ID field = %q, want %q", got, "hi")
 	}
 }
 
 func TestNdefCompleteOnTerminatorOrBlank(t *testing.T) {
-	if !ndefComplete([]byte{0xFE, 0, 0, 0}) {
+	if !Complete([]byte{0xFE, 0, 0, 0}) {
 		t.Error("terminator-only data should be complete")
 	}
-	if ndefComplete([]byte{0, 0, 0, 0}) {
+	if Complete([]byte{0, 0, 0, 0}) {
 		t.Error("all-NULL data needs more reading")
 	}
 }

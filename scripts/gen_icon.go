@@ -115,14 +115,14 @@ func encodeICO(frames [][]byte) []byte {
 		if s >= 256 {
 			dim = 0 // 0 means 256 in the ICO spec
 		}
-		buf.WriteByte(dim)                                            // width
-		buf.WriteByte(dim)                                            // height
-		buf.WriteByte(0)                                             // color count
-		buf.WriteByte(0)                                             // reserved
-		binary.Write(&buf, binary.LittleEndian, uint16(1))          // planes
-		binary.Write(&buf, binary.LittleEndian, uint16(32))         // bit count
-		binary.Write(&buf, binary.LittleEndian, uint32(len(data)))  // bytes in resource
-		binary.Write(&buf, binary.LittleEndian, uint32(offset))     // image offset
+		buf.WriteByte(dim)                                         // width
+		buf.WriteByte(dim)                                         // height
+		buf.WriteByte(0)                                           // color count
+		buf.WriteByte(0)                                           // reserved
+		binary.Write(&buf, binary.LittleEndian, uint16(1))         // planes
+		binary.Write(&buf, binary.LittleEndian, uint16(32))        // bit count
+		binary.Write(&buf, binary.LittleEndian, uint32(len(data))) // bytes in resource
+		binary.Write(&buf, binary.LittleEndian, uint32(offset))    // image offset
 		offset += len(data)
 	}
 	for _, data := range frames {

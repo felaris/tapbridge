@@ -1,17 +1,17 @@
 //go:build !darwin && !windows
 
-package main
+package autostart
 
 import "errors"
 
-func enableAutoStart() error {
+func Enable() error {
 	return errors.New("start at login is not supported on this platform")
 }
 
-func disableAutoStart() error {
+func Disable() error {
 	return nil
 }
 
-func isAutoStartEnabled() bool {
+func IsEnabled() bool {
 	return false
 }

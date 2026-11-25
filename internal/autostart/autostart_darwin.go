@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package autostart
 
 import (
 	"fmt"
@@ -19,7 +19,7 @@ func launchAgentPath() (string, error) {
 	return filepath.Join(home, "Library", "LaunchAgents", launchAgentLabel+".plist"), nil
 }
 
-func enableAutoStart() error {
+func Enable() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func enableAutoStart() error {
 	return nil
 }
 
-func disableAutoStart() error {
+func Disable() error {
 	path, err := launchAgentPath()
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func disableAutoStart() error {
 	return nil
 }
 
-func isAutoStartEnabled() bool {
+func IsEnabled() bool {
 	path, err := launchAgentPath()
 	if err != nil {
 		return false
