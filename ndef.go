@@ -7,17 +7,44 @@ import (
 
 // ── NDEF parsing ──────────────────────────────────────────────────────────────
 
+// parseNdefRecord extracts an ID from the first record of an NDEF message.
+// It handles both short (SR=1) and normal (4-byte payload length) records and
+// records carrying an ID field (IL=1).
 func parseNdefRecord(msg []byte) string {
 	if len(msg) < 3 {
 		return ""
 	}
-	typeLen := int(msg[1])
-	payLen := int(msg[2])
-	if len(msg) < 3+typeLen+payLen {
+	hdr := msg[0]
+	sr := hdr&0x10 != 0
+	il := hdr&0x08 != 0
+	i := 1
+	typeLen := int(msg[i])
+	i++
+	var payLen int
+	if sr {
+		payLen = int(msg[i])
+		i++
+	} else {
+		if len(msg) < i+4 {
+			return ""
+		}
+		payLen = int(msg[i])<<24 | int(msg[i+1])<<16 | int(msg[i+2])<<8 | int(msg[i+3])
+		i += 4
+	}
+	idLen := 0
+	if il {
+		if len(msg) <= i {
+			return ""
+		}
+		idLen = int(msg[i])
+		i++
+	}
+	if payLen < 0 || len(msg) < i+typeLen+idLen+payLen {
 		return ""
 	}
-	recType := string(msg[3 : 3+typeLen])
-	payload := msg[3+typeLen : 3+typeLen+payLen]
+	recType := string(msg[i : i+typeLen])
+	i += typeLen + idLen
+	payload := msg[i : i+payLen]
 
 	switch recType {
 	case "U":
@@ -49,25 +76,55 @@ func parseNdefRecord(msg []byte) string {
 	return ""
 }
 
-func parseNdef(data []byte) string {
+// findNdefTlv walks Type 2 tag TLV blocks and returns the NDEF message TLV
+// value. complete is false when more data must be read to decide.
+func findNdefTlv(data []byte) (value []byte, complete bool) {
 	i := 0
 	for i < len(data) {
 		t := data[i]
 		i++
-		if t == 0xfe || i >= len(data) {
-			break
-		}
-		if t == 0x00 {
+		switch t {
+		case 0x00: // NULL TLV
 			continue
+		case 0xFE: // terminator
+			return nil, true
+		}
+		if i >= len(data) {
+			return nil, false
 		}
 		l := int(data[i])
 		i++
-		if t == 0x03 && l > 0 && i+l <= len(data) {
-			return parseNdefRecord(data[i : i+l])
+		if l == 0xFF { // 3-byte length format
+			if i+2 > len(data) {
+				return nil, false
+			}
+			l = int(data[i])<<8 | int(data[i+1])
+			i += 2
+		}
+		if i+l > len(data) {
+			return nil, false
+		}
+		if t == 0x03 {
+			return data[i : i+l], true
 		}
 		i += l
 	}
-	return ""
+	return nil, false
+}
+
+// ndefComplete reports whether data already holds a complete NDEF TLV (or a
+// terminator), so the reader can stop issuing READ commands.
+func ndefComplete(data []byte) bool {
+	_, complete := findNdefTlv(data)
+	return complete
+}
+
+func parseNdef(data []byte) string {
+	v, _ := findNdefTlv(data)
+	if len(v) == 0 {
+		return ""
+	}
+	return parseNdefRecord(v)
 }
 
 // ── NDEF writing ──────────────────────────────────────────────────────────────

@@ -27,16 +27,31 @@ func onReady(cfg Config) {
 			log.Printf("[tapbridge] cannot bind %s: %v", addr, err)
 			return
 		}
-		setStatus("Waiting for reader...")
-		if err := http.Serve(ln, http.HandlerFunc(wsHandler)); err != nil {
+		log.Printf("[tapbridge] listening on ws://%s", addr)
+
+		handler := http.HandlerFunc(wsHandler)
+
+		// On Windows "localhost" resolves to ::1 first, and some clients
+		// (Node 17+, .NET, some WebView hosts) never fall back to 127.0.0.1.
+		// When bound to IPv4 loopback, also listen on IPv6 loopback so
+		// ws://localhost works everywhere. Best effort: IPv6 may be disabled.
+		if cfg.Host == "127.0.0.1" || cfg.Host == "localhost" {
+			if ln6, err := net.Listen("tcp", net.JoinHostPort("::1", cfg.Port)); err == nil {
+				log.Printf("[tapbridge] also listening on ws://[::1]:%s", cfg.Port)
+				go func() { _ = http.Serve(ln6, handler) }()
+			}
+		}
+
+		if err := http.Serve(ln, handler); err != nil {
 			log.Printf("[tapbridge] WebSocket server stopped: %v", err)
 		}
 	}()
 }
 
 func main() {
-	log.SetFlags(log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
+	setupLogging()
 
 	cfg := loadConfig()
 	appConfigMu.Lock()

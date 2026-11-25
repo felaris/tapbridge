@@ -110,3 +110,43 @@ func TestUriPrefixesTableStable(t *testing.T) {
 		t.Errorf("uriPrefixes changed: got %q, want %q", got, want)
 	}
 }
+
+func TestParseNdefLongTlvAndNormalRecord(t *testing.T) {
+	text := strings.Repeat("x", 300)
+	payload := append([]byte{2, 'e', 'n'}, []byte(text)...)
+	// MB=1 ME=1 SR=0 TNF=1, type len 1, 4-byte payload length, 'T'
+	n := len(payload)
+	record := []byte{0xC1, 0x01, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n), 'T'}
+	record = append(record, payload...)
+	data := []byte{0x03, 0xFF, byte(len(record) >> 8), byte(len(record))}
+	data = append(data, record...)
+	data = append(data, 0xFE)
+	if got := parseNdef(data); got != text {
+		t.Errorf("long TLV parse = %d chars, want %d", len(got), len(text))
+	}
+	if ndefComplete(data[:40]) {
+		t.Error("truncated TLV must not be reported complete")
+	}
+	if !ndefComplete(data) {
+		t.Error("full TLV must be reported complete")
+	}
+}
+
+func TestParseNdefRecordWithIDField(t *testing.T) {
+	// MB=1 ME=1 SR=1 IL=1 TNF=1, type len 1, payload len, id len 2, 'T', id, payload
+	payload := []byte{2, 'e', 'n', 'h', 'i'}
+	record := []byte{0xD9, 0x01, byte(len(payload)), 0x02, 'T', 'a', 'b'}
+	record = append(record, payload...)
+	if got := parseNdefRecord(record); got != "hi" {
+		t.Errorf("record with ID field = %q, want %q", got, "hi")
+	}
+}
+
+func TestNdefCompleteOnTerminatorOrBlank(t *testing.T) {
+	if !ndefComplete([]byte{0xFE, 0, 0, 0}) {
+		t.Error("terminator-only data should be complete")
+	}
+	if ndefComplete([]byte{0, 0, 0, 0}) {
+		t.Error("all-NULL data needs more reading")
+	}
+}

@@ -93,6 +93,15 @@ chmod +x ~/Downloads/tapbridge-mac-arm64
 
 Download `tapbridge-windows.exe` from the [latest release](https://github.com/felaris/tapbridge/releases/latest) and run it. Windows SmartScreen may warn about an unsigned binary — choose **More info → Run anyway**.
 
+TapBridge runs as a tray app with no console window — look for its icon in the notification area (you may need to click the **^** arrow to see it). Use **Open Log File** in the tray menu to see what it's doing.
+
+#### Windows troubleshooting
+
+- **Stuck on "Waiting for reader..."** — install the reader's driver from the manufacturer (for the ACR122U, the ACS "PC/SC Driver" package), then unplug and replug the reader. Check that the **Smart Card** service (`SCardSvr`) isn't disabled in `services.msc`. TapBridge now reconnects automatically when Windows stops and restarts that service on unplug/replug.
+- **Reader with two slots (ACR1252U, ACR1281U, …)** — these appear as a `PICC` (contactless) and a `SAM` reader. TapBridge now picks the contactless one automatically; you can override it under **Select Reader**.
+- **Taps are slow or Windows shows "Installing device driver" on every tap** — that's the Smart Card Plug and Play service probing each tag. You can turn it off in `gpedit.msc` → *Computer Configuration → Administrative Templates → Windows Components → Smart Card → Turn on Smart Card Plug and Play service* → **Disabled**.
+- **"Port 8765 in use"** — TapBridge is already running (check the tray), or another app owns the port; start it with `--port 9000`.
+
 ### Building from source
 
 See [Development](#development).
@@ -129,6 +138,8 @@ Reader selection and the Start at Login preference (set via the tray menu) are p
 
 - macOS: `~/Library/Application Support/tapbridge/config.json`
 - Windows: `%AppData%\tapbridge\config.json`
+
+A diagnostic log (`tapbridge.log`) is written to the same folder, and can be opened from the tray menu's **Open Log File** item.
 
 ## WebSocket protocol
 
@@ -190,6 +201,7 @@ All writes are wrapped in a standard TLV block, padded to a 4-byte page boundary
 ├── config.go                  # Config loading/persistence, CLI flags, origin allowlist logic
 ├── ws.go                      # WebSocket server: message protocol, broadcast, origin check
 ├── nfc.go                     # PC/SC polling loop, reader selection, card read/write
+├── logging.go                 # Log file setup (tapbridge.log) and "Open Log File" helper
 ├── ndef.go                    # NDEF Text/URI record parsing and encoding
 ├── tray.go                    # System tray menu: status, reader picker, Start at Login, last scanned ID
 ├── autostart_darwin.go        # macOS LaunchAgent-based "Start at Login" (build-tagged: darwin)

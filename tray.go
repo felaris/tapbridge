@@ -59,6 +59,17 @@ func buildTray(cfg Config) {
 	mAutoStart = systray.AddMenuItemCheckbox("Start at Login", "Launch TapBridge automatically", isAutoStartEnabled())
 	go watchAutoStart(mAutoStart)
 
+	mLog := systray.AddMenuItem("Open Log File", "Show TapBridge's diagnostic log")
+	go func() {
+		for range mLog.ClickedCh {
+			if p := logFilePath(); p != "" {
+				if err := openPath(p); err != nil {
+					log.Printf("[tapbridge] open log failed: %v", err)
+				}
+			}
+		}
+	}()
+
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit TapBridge", "")
 
@@ -103,25 +114,44 @@ func watchAutoStart(item *systray.MenuItem) {
 	}
 }
 
+// updateReaderMenuIfChanged calls updateReaderMenu only when the reader list
+// or selection actually changed. Rewriting tray items on every poll makes the
+// Windows tray menu flicker and close itself while the user has it open.
+func updateReaderMenuIfChanged(lastReaders *[]string, lastSelected *string, readers []string, selected string) {
+	if selected == *lastSelected && equalStrings(readers, *lastReaders) {
+		return
+	}
+	*lastReaders = append([]string(nil), readers...)
+	*lastSelected = selected
+	updateReaderMenu(readers, selected)
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // updateReaderMenu reflects the currently connected readers and the active
-// selection (mirroring pickReader's fallback-to-first-reader behavior) in the
+// selection (using pickReader so the checkmark matches the reader actually polled) in the
 // tray's "Select Reader" submenu.
 func updateReaderMenu(readers []string, selected string) {
 	slotMu.Lock()
 	defer slotMu.Unlock()
 
-	foundSelected := false
-	if selected != "" {
-		for _, r := range readers {
-			if r == selected {
-				foundSelected = true
-				break
-			}
-		}
-	}
+	active := pickReader(readers, selected)
 
 	for i := 0; i < maxReaderSlots; i++ {
 		slot := readerSlots[i]
+		if slot == nil {
+			continue
+		}
 		if i >= len(readers) {
 			slotNames[i] = ""
 			slot.Hide()
@@ -132,7 +162,7 @@ func updateReaderMenu(readers []string, selected string) {
 		slotNames[i] = name
 		slot.SetTitle(name)
 		slot.Show()
-		if name == selected || (!foundSelected && i == 0) {
+		if name == active {
 			slot.Check()
 		} else {
 			slot.Uncheck()
