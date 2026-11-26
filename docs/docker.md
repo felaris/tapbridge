@@ -134,7 +134,7 @@ The image has a built-in `HEALTHCHECK` (`tapbridge --healthcheck`), so
 | Tag | Meaning |
 |---|---|
 | `latest` | Newest release |
-| `1.2.3` | An exact release |
+| `1.2.3` or `v1.2.3` | An exact release (both spellings point to the same image) |
 | `1.2` | Newest patch of a minor version |
 
 ## Building it yourself
