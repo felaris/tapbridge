@@ -74,7 +74,7 @@ jobs:
       - name: Copy install script
         run: cp scripts/install.sh dist/install.sh
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mac-binaries
           path: dist/
@@ -102,7 +102,7 @@ jobs:
           $env:CC = "gcc"
           go build -trimpath -ldflags="-s -w -H windowsgui -X main.version=$env:VERSION" -o dist\tapbridge-windows.exe ./cmd/tapbridge
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-binary
           path: dist\
