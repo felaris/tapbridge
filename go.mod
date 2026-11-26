@@ -6,7 +6,7 @@ require (
 	github.com/ebfe/scard v0.0.0-20241214075232-7af069cabc25
 	github.com/getlantern/systray v1.2.2
 	github.com/gorilla/websocket v1.5.3
-	golang.org/x/sys v0.1.0
+	golang.org/x/sys v0.50.0
 )
 
 require (
