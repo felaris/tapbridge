@@ -203,6 +203,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ needs.version.outputs.tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.tag }}
+            type=raw,value=${{ needs.version.outputs.tag }}
             type=raw,value=latest
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
