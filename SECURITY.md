@@ -30,9 +30,10 @@ TapBridge runs a local WebSocket server (default `ws://localhost:8765`) that rea
 data from NFC cards and can write data to them. Keep the following in mind:
 
 - **Origin allowlist.** By default, only `localhost` / `127.0.0.1` origins may
-  connect. Any other web origin must be explicitly allowlisted via `--allow-origin`
+  connect. A rejected page receives an explanatory error and is disconnected
+  before it is registered, so it never receives card data. Any other web origin must be explicitly allowlisted via `--allow-origin`
   or `TAPBRIDGE_ALLOWED_ORIGINS`. Do **not** allowlist origins you do not control.
-- **Loopback binding by default.** The server binds to `127.0.0.1` and is not
+- **Loopback binding by default.** The server binds to `127.0.0.1` (and `[::1]`) and is not
   reachable from other machines. Exposing it to the network requires an explicit
   `--host 0.0.0.0` (or a LAN IP) / `TAPBRIDGE_HOST` override — don't do this
   unless you also add authentication in front of it.
@@ -43,8 +44,22 @@ data from NFC cards and can write data to them. Keep the following in mind:
 - **No transport encryption.** The bridge listens on plain `ws://`. Do not expose
   the port beyond `localhost` (e.g. via a reverse proxy or port forward) without
   adding TLS and authentication.
+- **Writes are tied to the requesting page.** A pending write is cancelled if
+  the page that requested it disconnects, and writes never exceed the tag's
+  data area.
 - **Card data is not validated.** IDs read from cards are passed through as-is.
   Treat anything read from an NFC tag as untrusted input in your web app.
+
+## Build and release pipeline
+
+- Releases and Docker images are built only by GitHub Actions on the `main`
+  branch. Pull requests (including from forks) run tests with a read-only
+  token and **no secrets**.
+- The Docker Hub token is a GitHub encrypted secret scoped to a `dockerhub`
+  environment that only `main` can use. GitHub masks it in logs.
+- Every third-party action is pinned to a full commit SHA, and Dependabot
+  proposes updates as reviewable pull requests.
+- Docker images carry signed build provenance and an SBOM.
 
 If any of these defaults don't fit your deployment, please open an issue to
 discuss hardening options (e.g. shared-token authentication).

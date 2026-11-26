@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package autostart
 
 import (
 	"os"
@@ -13,7 +13,7 @@ const (
 	runKeyPath   = `Software\Microsoft\Windows\CurrentVersion\Run`
 )
 
-func enableAutoStart() error {
+func Enable() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -29,7 +29,7 @@ func enableAutoStart() error {
 	return k.SetStringValue(runValueName, `"`+exe+`"`)
 }
 
-func disableAutoStart() error {
+func Disable() error {
 	k, err := registry.OpenKey(registry.CURRENT_USER, runKeyPath, registry.SET_VALUE)
 	if err != nil {
 		if err == registry.ErrNotExist {
@@ -45,7 +45,7 @@ func disableAutoStart() error {
 	return nil
 }
 
-func isAutoStartEnabled() bool {
+func IsEnabled() bool {
 	k, err := registry.OpenKey(registry.CURRENT_USER, runKeyPath, registry.QUERY_VALUE)
 	if err != nil {
 		return false

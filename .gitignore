@@ -1,6 +1,15 @@
-dist/
-*.exe
-felaris-nfc-bridge-mac-*
-/felaris-nfc-bridge
-.claude
+# Build output
+/dist/
 /tapbridge
+*.exe
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+.claude
+
+# Go
+*.test
+*.out
+coverage.*

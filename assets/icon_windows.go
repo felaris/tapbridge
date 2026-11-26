@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package assets
 
 import _ "embed"
 
@@ -8,5 +8,5 @@ import _ "embed"
 // .ico file — a PNG will not load. See scripts/gen_icon.go for how this is
 // generated from assets/icon.png.
 //
-//go:embed assets/icon.ico
-var iconData []byte
+//go:embed icon.ico
+var Icon []byte
